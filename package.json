@@ -11,6 +11,8 @@
     "dev:all": "concurrently \"npm run server\" \"npm run dev\""
   },
   "dependencies": {
+    "@fontsource/atkinson-hyperlegible": "^5.3.0",
+    "@fontsource/opendyslexic": "^5.3.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

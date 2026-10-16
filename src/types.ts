@@ -33,6 +33,7 @@ export type Page =
   | 'revisionschedule'
   | 'upcomingexams'
   | 'learninghistory'
+  | 'visualstudio'
   | 'practicequestions'
   | 'twininsights'
   | 'subjectperf'
@@ -98,6 +99,16 @@ export interface UserProfile {
   avatar?: string
   accessibility: AccessibilityProfile
   learningPattern: LearningPattern
+  learningPreferences?: {
+    font: 'default' | 'opendyslexic' | 'atkinson'
+    learningFormats: string[]
+    explanationStyle: string | null
+    chunkSize: 'small' | 'medium' | 'full'
+    interests: string[]
+    interestsCustom: string
+    formatSwitching: 'yes' | 'noPreference' | 'askLater'
+    onboardingPreferencesDone: boolean
+  }
   aiConfidence: number
   streak: number
   lessonsCompleted: number

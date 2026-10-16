@@ -26,6 +26,7 @@ db.exec(`
     lessons_completed INTEGER DEFAULT 0,
     understanding INTEGER DEFAULT 0,
     xp INTEGER DEFAULT 0,
+    preferences TEXT,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
   );
@@ -77,6 +78,22 @@ db.exec(`
     total_questions INTEGER,
     answers TEXT,
     created_at TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+`)
+
+try { db.prepare('ALTER TABLE users ADD COLUMN preferences TEXT').run() } catch {}
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS diagrams (
+    id TEXT PRIMARY KEY,
+    user_id TEXT,
+    topic TEXT,
+    diagram_type TEXT,
+    complexity TEXT,
+    spec TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
 `)

@@ -26,6 +26,21 @@ try:
         xml = re.sub(r"<[^>]+>", "", xml)
         result["text"] = re.sub(r"\n{3,}", "\n\n", xml).strip()
         result["pages"] = max(1, len(result["text"]) // 2500)
+    elif extension == ".pptx":
+        with zipfile.ZipFile(path) as archive:
+            slide_names = sorted(
+                name for name in archive.namelist()
+                if name.startswith("ppt/slides/slide") and name.endswith(".xml")
+            )
+            slide_texts = []
+            for slide_name in slide_names:
+                xml = archive.read(slide_name).decode("utf-8", "ignore")
+                texts = re.findall(r"<a:t[^>]*>(.*?)</a:t>", xml, re.S)
+                slide_text = " ".join(re.sub(r"<[^>]+>", "", text).strip() for text in texts if text.strip())
+                if slide_text:
+                    slide_texts.append(slide_text)
+        result["text"] = "\n\n".join(slide_texts).strip()
+        result["pages"] = max(1, len(slide_texts))
     elif extension in (".txt", ".csv", ".md"):
         with open(path, "r", encoding="utf-8", errors="ignore") as handle:
             result["text"] = handle.read().strip()

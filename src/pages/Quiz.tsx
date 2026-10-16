@@ -54,8 +54,8 @@ export default function Quiz({ navigate, user, setUser, uploadedFile }: Props) {
   const activeFile = uploadedFile || readLocal<UploadedFile | null>('lt-active-upload', null)
   const c = buildContent(activeFile, user)
   const generatedQuestions: { topic: string; q: string; opts: string[]; correct: number; exp: string; alt: string }[] = c.quizQ
-    .filter((item) => item.type !== 'short')
-    .map((item) => {
+    .filter((item: any) => item.type !== 'short')
+    .map((item: any) => {
       const options = item.type === 'tf' ? ['True', 'False'] : (item.options || [])
       const correctIndex = item.type === 'tf'
         ? (item.answer === 'True' ? 0 : 1)

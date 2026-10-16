@@ -26,6 +26,7 @@ export interface UploadedFile {
   subjectId?: string
   chapter?: string
   extractedText?: string
+  aiPack?: any
   createdAt?: string
   processingMode?: 'local' | 'demo'
 }
@@ -181,19 +182,33 @@ export default function ScanLearn({ navigate, user, onFileUploaded, uploadContex
 
   const generatePack = async () => {
     if (!file) return
-    if (!extractedText.trim()) {
-      setError('No readable content is available. Paste the note text before creating a Learning Pack.')
-      return
-    }
+    const finalText = extractedText.trim() || file.extractedText?.trim() || ''
     const selectedSubject = subjects.find((subject) => subject.id === subjectId)
     let keyConcepts = file.keyConcepts
     let vocab = file.vocab
     let difficulty = file.difficulty
+    let aiPack: any = null
+    try {
+      const aiResponse = await fetch('http://localhost:3001/api/generate-pack', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: finalText, filename: file.name }),
+      })
+      if (aiResponse.ok) {
+        const payload = await aiResponse.json()
+        aiPack = payload.pack || payload
+        if (aiPack?.keyConcepts?.length) keyConcepts = aiPack.keyConcepts
+        if (aiPack?.vocabulary?.length) vocab = aiPack.vocabulary
+        if (aiPack?.difficulty) difficulty = aiPack.difficulty
+      }
+    } catch {
+      // Fall back to local extraction when AI is unavailable.
+    }
     try {
       const analysisResponse = await fetch('http://localhost:3001/api/analyze-document', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: extractedText.trim(), filename: file.name }),
+        body: JSON.stringify({ text: finalText, filename: file.name }),
       })
       if (analysisResponse.ok) {
         const analysis = await analysisResponse.json()
@@ -204,7 +219,7 @@ export default function ScanLearn({ navigate, user, onFileUploaded, uploadContex
     } catch {
       // Fall back to local frequency extraction when the backend is unavailable.
     }
-    const words = extractedText.match(/\b[A-Za-z][A-Za-z-]{4,}\b/g) || []
+    const words = finalText.match(/\b[A-Za-z][A-Za-z-]{4,}\b/g) || []
     const frequent = Array.from(new Set(words.map((word) => word.toLowerCase()))).slice(0, 6)
     if (!keyConcepts?.length && frequent.length) {
       keyConcepts = frequent.map((word) => word.replace(/^\w/, (char) => char.toUpperCase()))
@@ -215,12 +230,14 @@ export default function ScanLearn({ navigate, user, onFileUploaded, uploadContex
     const updated: UploadedFile = {
       ...file,
       subjectId: selectedSubject?.id,
-      subject: selectedSubject?.name || file.subject,
+      subject: selectedSubject?.name || (aiPack?.subject as string) || file.subject,
+      topic: (aiPack?.topic as string) || file.topic,
       chapter,
-      extractedText: extractedText.trim(),
+      extractedText: finalText,
       keyConcepts: keyConcepts || file.keyConcepts,
       vocab: vocab || file.vocab,
-      difficulty: difficulty || file.difficulty,
+      difficulty: (difficulty as UploadedFile['difficulty']) || file.difficulty,
+      aiPack,
     }
     setFile(updated)
     setStep('processing')

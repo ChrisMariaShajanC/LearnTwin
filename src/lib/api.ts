@@ -28,5 +28,11 @@ export const api = {
   getQuizResults: (userId?: string) => request(`/quiz-results${userId ? `?userId=${userId}` : ''}`),
   createQuizResult: (result: unknown) => request('/quiz-results', { method: 'POST', body: JSON.stringify(result) }),
 
-  getStats: (userId: string) => request(`/stats/${userId}`)
+  getStats: (userId: string) => request(`/stats/${userId}`),
+
+  getDiagrams: (userId?: string) => request(`/diagrams${userId ? `?userId=${userId}` : ''}`),
+  createDiagram: (diagram: unknown) => request('/diagrams', { method: 'POST', body: JSON.stringify(diagram) }),
+
+  ai: (payload: { system?: string; prompt?: string; messages?: { role: 'user' | 'assistant'; content: string }[]; maxTokens?: number }) =>
+    request<{ text: string }>('/ai', { method: 'POST', body: JSON.stringify(payload) })
 }

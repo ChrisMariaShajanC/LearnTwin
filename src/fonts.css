@@ -1,0 +1,28 @@
+.learning-text {
+  line-height: 1.6;
+  letter-spacing: 0.015em;
+  overflow-wrap: break-word;
+  max-width: 72ch;
+}
+
+[data-font='opendyslexic'] .learning-text { font-family: 'OpenDyslexic', 'Verdana', sans-serif; }
+[data-font='atkinson'] .learning-text { font-family: 'Atkinson Hyperlegible', 'Verdana', sans-serif; }
+[data-font='default'] .learning-text { font-family: inherit; }
+
+.prefs-panel :focus-visible,
+.chip :focus-visible,
+.learning-text :focus-visible {
+  outline: 3px solid #1a73e8;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prefs-panel *, .chip, .preview-card { transition: none !important; animation: none !important; }
+}
+
+.chip { position: relative; border: 2px solid #b9c2cf; border-radius: 12px; padding: 10px 14px; cursor: pointer; }
+.chip.is-selected { border-color: #1a73e8; border-width: 3px; padding: 9px 13px; }
+.chip.is-selected::after { content: '✓'; position: absolute; top: -10px; right: -8px; background: #1a73e8; color: #fff; border-radius: 50%; width: 22px; height: 22px; display: grid; place-items: center; font-size: 14px; }
+
+.preview-card { border: 1px solid #d7dde5; border-radius: 12px; padding: 14px; margin: 10px 0; background: #fff; }

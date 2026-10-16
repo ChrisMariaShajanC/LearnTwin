@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { Page, ThemeMode, DensitySize, UserProfile } from '../types'
 import { readLocal, writeLocal } from '../lib/localData'
+import LearningPreferencesPanel from '../components/preferences/LearningPreferencesPanel'
+import { usePreferences } from '../context/PreferencesContext'
 
 interface Props {
   navigate: (p: Page) => void
@@ -15,7 +17,7 @@ interface Props {
   initialSection?: Section
 }
 
-type Section = 'appearance' | 'accessibility' | 'ai' | 'privacy'
+type Section = 'appearance' | 'accessibility' | 'preferences' | 'ai' | 'privacy'
 
 const DEFAULT_FEATURE_SETTINGS = {
   autoAdapt: true,
@@ -88,6 +90,7 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 }
 
 export default function Settings({ navigate, theme, setTheme, density, setDensity, customPrimary, setCustomColor, user, setUser, initialSection = 'appearance' }: Props) {
+  const prefsCtx = usePreferences()
   const [section, setSection] = useState<Section>(initialSection)
   const savedFeatures = readLocal('lt-feature-settings', DEFAULT_FEATURE_SETTINGS)
 
@@ -116,6 +119,7 @@ export default function Settings({ navigate, theme, setTheme, density, setDensit
   const tabs: { id: Section; icon: string; label: string }[] = [
     { id: 'appearance',   icon: '🎨', label: 'Appearance' },
     { id: 'accessibility', icon: '♿', label: 'Accessibility' },
+    { id: 'preferences',  icon: '🎯', label: 'Learning' },
     { id: 'ai',           icon: '🧠', label: 'AI' },
     { id: 'privacy',      icon: '🔒', label: 'Privacy' },
   ]
@@ -315,6 +319,21 @@ export default function Settings({ navigate, theme, setTheme, density, setDensit
                   Open →
                 </button>
               </SettingsRow>
+            </Card>
+          </div>
+        )}
+
+        {/* ── LEARNING PREFERENCES ── */}
+        {section === 'preferences' && (
+          <div className="space-y-4 animate-fade-in">
+            <Card title="🎯 Learning choices">
+              <LearningPreferencesPanel mode="settings" student={{ grade: user.grade, subject: '', language: 'en' }} subjects={[]} saving={prefsCtx.status === 'saving'} />
+            </Card>
+            <Card title="Restore">
+              <div className="py-4">
+                <button onClick={() => prefsCtx.reset()} className="lt-btn lt-btn-primary px-5 py-2.5">Put everything back to the default</button>
+                <p className="text-xs mt-2" style={{ color: 'var(--muted-foreground)' }}>This only resets your choices. Your progress, scores and saved work all stay.</p>
+              </div>
             </Card>
           </div>
         )}

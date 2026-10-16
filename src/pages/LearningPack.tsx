@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { Page, UserProfile } from '../types'
 import type { UploadedFile } from './ScanLearn'
 import BackButton from '../components/BackButton'
+import ListenButton from '../components/preferences/ListenButton'
 import { createId, readLocal, writeLocal } from '../lib/localData'
 import { api } from '../lib/api'
 
@@ -40,28 +41,36 @@ interface QuizQ {
 }
 
 export function buildContent(file: UploadedFile | null, user: UserProfile) {
-  const topic   = file?.topic   || 'Your Topic'
-  const subject = file?.subject || 'General'
+  const aiPack: any = file?.aiPack || null
+  const topic: string   = aiPack?.topic || file?.topic || 'Your Topic'
+  const subject: string = aiPack?.subject || file?.subject || 'General'
   const fname   = file?.name    || 'document.pdf'
-  const concepts = file?.keyConcepts || []
-  const vocab    = file?.vocab   || []
+  const concepts: string[] = Array.isArray(aiPack?.keyConcepts) && aiPack.keyConcepts.length ? aiPack.keyConcepts : (file?.keyConcepts || [])
+  const vocab: string[]    = Array.isArray(aiPack?.vocabulary) && aiPack.vocabulary.length ? aiPack.vocabulary : (file?.vocab || [])
   const sourceText = file?.extractedText?.trim() || ''
   const sourceSentences = sourceText.split(/(?<=[.!?])\s+/).filter(Boolean)
 
   const fallbackConcepts = concepts.length ? concepts : [topic]
   const validSentences = sourceSentences.filter((sentence) => sentence.split(/\s+/).length >= 6)
 
-  const lesson = sourceText ? `
+  const lesson = aiPack?.lesson
+    ? String(aiPack.lesson)
+    : sourceText
+      ? `
 **Reviewed source summary**
 
 ${sourceSentences.slice(0, 4).join(' ')}
 
 **Key ideas**
 
-${fallbackConcepts.map((concept, index) => `**${index + 1}. ${concept}**\n${sourceSentences.find((sentence) => sentence.toLowerCase().includes(concept.toLowerCase())) || `This idea is identified from ${fname}.`}`).join('\n\n')}
+${fallbackConcepts.map((concept: any, index: any) => {
+  const match = sourceSentences.find((sentence) => sentence.toLowerCase().includes(concept.toLowerCase()))
+  return `**${index + 1}. ${concept}**\n${match || `This idea is identified from ${fname}.`}`
+}).join('\n\n')}
 
 This Learning Pack uses only the text you reviewed in ${fname}.
-  `.trim() : `
+`.trim()
+      : `
 **What is ${topic}?**
 
 ${topic} is one of the most important concepts in ${subject}. Let's break it down step by step so it's easy to understand.
@@ -69,20 +78,26 @@ ${topic} is one of the most important concepts in ${subject}. Let's break it dow
 🌟 **The Big Idea**
 Think of it this way: ${fallbackConcepts[0] || 'the main concept'} and ${fallbackConcepts[1] || 'related ideas'} work together to make something meaningful happen.
 
-${fallbackConcepts.map((concept, i) => `**Step ${i + 1}:** ${concept}\nThis is a key idea identified for ${topic}.`).join('\n\n')}
+${fallbackConcepts.map((concept: any, i: any) => `**Step ${i + 1}:** ${concept}\nThis is a key idea identified for ${topic}.`).join('\n\n')}
 
 💡 **Why does this matter?**
 Understanding ${topic} helps you use the ideas in ${fname}.
-  `.trim()
+`.trim()
 
-  const notes = fallbackConcepts.map((concept, i) => ({
-    emoji: ['🔑', '⭐', '✅', '📌', '💎'][i % 5],
-    heading: concept.replace(/[^\w\s]/g, '').trim(),
-    body: sourceSentences.find((sentence) => sentence.toLowerCase().includes(concept.toLowerCase())) || `This term was identified in the reviewed material for ${topic}.`,
-  }))
+  const notes = aiPack?.notes?.length
+    ? aiPack.notes.map((note: any, i: any) => ({
+        emoji: note.emoji || ['🔑', '⭐', '✅', '📌', '💎'][i % 5],
+        heading: (note.heading || note.title || concepts[i] || `Key idea ${i + 1}`).replace(/[^\w\s]/g, '').trim(),
+        body: note.body || note.text || sourceSentences.find((sentence) => sentence.toLowerCase().includes(String(concepts[i] || '').toLowerCase())) || 'Identified from the reviewed material.',
+      }))
+    : fallbackConcepts.map((concept: any, i: any) => ({
+        emoji: ['🔑', '⭐', '✅', '📌', '💎'][i % 5],
+        heading: concept.replace(/[^\w\s]/g, '').trim(),
+        body: sourceSentences.find((sentence) => sentence.toLowerCase().includes(concept.toLowerCase())) || `This term was identified in the reviewed material for ${topic}.`,
+      }))
 
   const generatedQuiz: QuizQ[] = []
-  fallbackConcepts.slice(0, 5).forEach((concept, index) => {
+  fallbackConcepts.slice(0, 5).forEach((concept: any, index: any) => {
     const sentence = validSentences.find((item) => item.toLowerCase().includes(concept.toLowerCase()) && !generatedQuiz.some((q) => q.q.includes(item)))
     if (sentence) {
       const options = [concept, ...fallbackConcepts.filter((item) => item !== concept).slice(0, 3)]
@@ -107,32 +122,55 @@ Understanding ${topic} helps you use the ideas in ${fname}.
     q: `In your own words, explain one important idea about ${topic} using the reviewed text.`,
     answer: sourceSentences[0] || `${topic} is an important idea in ${subject}.`,
   })
-  const quizQ = generatedQuiz.length ? generatedQuiz : [{
-    type: 'mcq',
-    q: `Which topic is this Learning Pack about?`,
-    options: [topic, 'Unrelated topic', 'No topic', 'Not stated'],
-    answer: topic,
-  }]
+  const quizQ = aiPack?.quiz?.length
+    ? aiPack.quiz.map((item: any) => ({
+        type: item.type === 'tf' || item.type === 'short' ? item.type : 'mcq',
+        q: item.q || item.question || `Question about ${topic}`,
+        options: item.options || item.choices || ['True', 'False'],
+        answer: item.answer || item.correctAnswer || '',
+      }))
+    : (generatedQuiz.length ? generatedQuiz : [{
+        type: 'mcq',
+        q: `Which topic is this Learning Pack about?`,
+        options: [topic, 'Unrelated topic', 'No topic', 'Not stated'],
+        answer: topic,
+      }])
 
-  const videos = fallbackConcepts.slice(0, 3).map((concept, index) => ({
-    title: `${topic}: ${concept}`,
-    desc: sourceSentences.find((sentence) => sentence.toLowerCase().includes(concept.toLowerCase())) || `Review of ${concept}.`,
-    dur: `${2 + index}:${10 + index * 5}`,
-    img: VIDEO_IMAGES[index % VIDEO_IMAGES.length],
-    text: sourceSentences.find((sentence) => sentence.toLowerCase().includes(concept.toLowerCase())) || concept,
-  }))
+  const videos = aiPack?.videos?.length
+    ? aiPack.videos.map((video: any, index: any) => ({
+        title: video.title || `${topic}: ${concepts[index] || topic}`,
+        desc: video.desc || video.description || sourceSentences.find((sentence) => sentence.toLowerCase().includes(String(concepts[index] || '').toLowerCase())) || `Review of ${concepts[index] || topic}.`,
+        dur: video.dur || video.duration || `${2 + index}:${10 + index * 5}`,
+        img: VIDEO_IMAGES[index % VIDEO_IMAGES.length],
+        text: video.text || video.desc || sourceSentences.find((sentence) => sentence.toLowerCase().includes(String(concepts[index] || '').toLowerCase())) || String(concepts[index] || topic),
+      }))
+    : fallbackConcepts.slice(0, 3).map((concept: any, index: any) => ({
+        title: `${topic}: ${concept}`,
+        desc: sourceSentences.find((sentence) => sentence.toLowerCase().includes(concept.toLowerCase())) || `Review of ${concept}.`,
+        dur: `${2 + index}:${10 + index * 5}`,
+        img: VIDEO_IMAGES[index % VIDEO_IMAGES.length],
+        text: sourceSentences.find((sentence) => sentence.toLowerCase().includes(concept.toLowerCase())) || concept,
+      }))
 
-  const examples = fallbackConcepts.slice(0, 3).map((concept, index) => ({
-    emoji: ['🌍', '🔬', '📱'][index % 3],
-    title: `${concept} in context`,
-    body: sourceSentences.find((sentence) => sentence.toLowerCase().includes(concept.toLowerCase())) || `${concept} is part of ${topic}.`,
-  }))
+  const examples = aiPack?.examples?.length
+    ? aiPack.examples.map((example: any, index: any) => ({
+        emoji: (typeof example === 'string' ? ['🌍', '🔬', '📱'][index % 3] : example.emoji) || ['🌍', '🔬', '📱'][index % 3],
+        title: (typeof example === 'string' ? `Example ${index + 1}` : (example.title || `${(example.concept || concepts[index] || topic)} in context`)),
+        body: (typeof example === 'string' ? example : (example.body || example.text || `${example.concept || concepts[index] || topic} is part of ${topic}.`)),
+      }))
+    : fallbackConcepts.slice(0, 3).map((concept: any, index: any) => ({
+        emoji: ['🌍', '🔬', '📱'][index % 3],
+        title: `${concept} in context`,
+        body: sourceSentences.find((sentence) => sentence.toLowerCase().includes(concept.toLowerCase())) || `${concept} is part of ${topic}.`,
+      }))
 
-  const practiceQs = [
-    `Summarize ${topic} in two sentences using only the reviewed text.`,
-    ...fallbackConcepts.slice(0, 4).map((concept) => `Explain ${concept} in your own words.`),
-    `List one question you still have about ${fname}.`,
-  ]
+  const practiceQs = aiPack?.practiceQuestions?.length
+    ? aiPack.practiceQuestions.map((item: any) => String(item))
+    : (aiPack?.practiceQs?.length ? aiPack.practiceQs.map((item: any) => String(item)) : [
+        `Summarize ${topic} in two sentences using only the reviewed text.`,
+        ...fallbackConcepts.slice(0, 4).map((concept: any) => `Explain ${concept} in your own words.`),
+        `List one question you still have about ${fname}.`,
+      ])
 
   return { lesson, notes, quizQ, videos, examples, practiceQs, topic, fname, subject, keyConcepts: fallbackConcepts, vocab: fallbackConcepts.slice(0, 5), sourceText, sourceSentences }
 }
@@ -171,7 +209,7 @@ export default function LearningPack({ navigate, user, uploadedFile, initialTab 
     window.speechSynthesis.speak(utterance)
   }, [playingVideo])
 
-  const correctCount = c.quizQ.filter((q, i) => quizAnswers[i] === q.answer).length
+  const correctCount = c.quizQ.filter((q: any, i: any) => quizAnswers[i] === q.answer).length
 
   const groundedReply = (question: string) => {
     if (!c.sourceText) return 'I do not have source material for this question. Upload notes first so I can cite the available text.'
@@ -215,9 +253,10 @@ export default function LearningPack({ navigate, user, uploadedFile, initialTab 
           <h1 className="text-2xl md:text-3xl font-black mb-1" style={{ color: 'var(--foreground)' }}>
             {c.topic}
           </h1>
-          <p className="text-sm font-body" style={{ color: 'var(--muted-foreground)' }}>
-            From <strong>{c.fname}</strong> · personalized for {user.name}
-          </p>
+            <p className="text-sm font-body" style={{ color: 'var(--muted-foreground)' }}>
+              From <strong>{c.fname}</strong> · personalized for {user.name}
+            </p>
+            <div className="mt-3"><ListenButton text={c.lesson.replace(/\*\*/g, '')} lang={user.accessibility?.audioEnabled ? 'en' : 'en'} /></div>
           <p className="mt-2 text-xs rounded-lg border px-3 py-2" style={{ background: 'var(--muted)', borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
             Local prototype mode. Notes and source lookup use reviewed text; generative AI is not connected.
           </p>
@@ -266,19 +305,25 @@ export default function LearningPack({ navigate, user, uploadedFile, initialTab 
               <h2 className="text-xl font-black" style={{ color: 'var(--foreground)' }}>Simplified Lesson</h2>
             </div>
             <div
-              className="prose prose-sm max-w-none font-body leading-relaxed space-y-4"
+              className="prose prose-sm max-w-none font-body leading-relaxed space-y-4 learning-text"
               style={{ color: 'var(--foreground)', fontSize: user.accessibility.fontSize === 'xl' ? '1.1rem' : user.accessibility.fontSize === 'large' ? '1rem' : '.9rem', lineHeight: user.accessibility.lineSpacing === 'loose' ? '2' : user.accessibility.lineSpacing === 'relaxed' ? '1.75' : '1.5' }}
             >
-              {c.lesson.split('\n\n').map((para, i) => (
+              {c.lesson.split('\n\n').map((para: any, i: any) => (
                 <p key={i} dangerouslySetInnerHTML={{ __html: para.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
               ))}
             </div>
             <button
-              onClick={() => navigate('lesson')}
+              onClick={() => navigate('pack')}
+            >
+              Open Full Lesson
+            </button>
+
+            <button
+              onClick={() => navigate('visualstudio')}
               className="mt-5 px-5 py-2.5 rounded-xl font-bold text-sm btn-press"
               style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}
             >
-              Open Full Lesson →
+              Visualize this topic 🎨
             </button>
           </div>
         )}
@@ -290,7 +335,7 @@ export default function LearningPack({ navigate, user, uploadedFile, initialTab 
             <p className="text-sm font-body mb-4" style={{ color: 'var(--muted-foreground)' }}>
               Key points from {c.fname} — made simple:
             </p>
-            {c.notes.map((n, i) => (
+            {c.notes.map((n: any, i: any) => (
               <div
                 key={i}
                 className="flex gap-3 rounded-2xl border p-4"
@@ -319,7 +364,7 @@ export default function LearningPack({ navigate, user, uploadedFile, initialTab 
               Based on <strong>{c.fname}</strong> — adapted to your Learning Twin:
             </p>
 
-            {c.quizQ.map((q, i) => (
+            {c.quizQ.map((q: any, i: any) => (
               <div
                 key={i}
                 className="rounded-2xl border p-5"
@@ -345,7 +390,7 @@ export default function LearningPack({ navigate, user, uploadedFile, initialTab 
 
                 {q.type === 'mcq' && (
                   <div className="space-y-2 ml-10">
-                    {q.options!.map(opt => (
+                    {q.options!.map((opt: any) => (
                       <button
                         key={opt}
                         onClick={() => !quizChecked && setQuizAnswers(a => ({ ...a, [i]: opt }))}
@@ -404,8 +449,8 @@ export default function LearningPack({ navigate, user, uploadedFile, initialTab 
               <button
                 onClick={() => {
                   setQuizChecked(true)
-                  const checked = c.quizQ.filter((q) => q.type !== 'short').length
-                  const correct = c.quizQ.filter((q, i) => q.type !== 'short' && quizAnswers[i] === q.answer).length
+                  const checked = c.quizQ.filter((q: any) => q.type !== 'short').length
+                  const correct = c.quizQ.filter((q: any, i: any) => q.type !== 'short' && quizAnswers[i] === q.answer).length
                   const payload = {
                     id: createId('quiz'),
                     userId: USER_ID,
@@ -413,7 +458,7 @@ export default function LearningPack({ navigate, user, uploadedFile, initialTab 
                     chapter: uploadedFile?.chapter,
                     score: correct,
                     totalQuestions: checked,
-                    answers: c.quizQ.map((q, i) => ({ question: q.q, selected: quizAnswers[i] || '', correct: quizAnswers[i] === q.answer })),
+                    answers: c.quizQ.map((q: any, i: any) => ({ question: q.q, selected: quizAnswers[i] || '', correct: quizAnswers[i] === q.answer })),
                   }
                   writeLocal('lt-quiz-attempts', [payload, ...readLocal('lt-quiz-attempts', [])])
                   api.createQuizResult(payload).catch(() => {})
@@ -430,7 +475,7 @@ export default function LearningPack({ navigate, user, uploadedFile, initialTab 
               >
                 <div className="text-4xl mb-2">{correctCount >= 3 ? '🎉' : '📚'}</div>
                 <p className="font-black text-xl font-display mb-1" style={{ color: 'var(--foreground)' }}>
-                  {correctCount} / {c.quizQ.filter(q => q.type !== 'short').length} correct!
+                  {correctCount} / {c.quizQ.filter((q: any) => q.type !== 'short').length} correct!
                 </p>
                 <p className="text-sm font-body" style={{ color: 'var(--muted-foreground)' }}>
                   {correctCount >= 3 ? "Amazing job, you're getting it!" : 'Keep going — every question makes you smarter!'}
@@ -484,7 +529,7 @@ export default function LearningPack({ navigate, user, uploadedFile, initialTab 
               </div>
             )}
 
-            {c.videos.map((v, i) => (
+            {c.videos.map((v: any, i: any) => (
               <div
                 key={i}
                 className="rounded-2xl border overflow-hidden card-lift"
@@ -635,11 +680,17 @@ export default function LearningPack({ navigate, user, uploadedFile, initialTab 
               {['Explain this simply', 'Give me an example', 'Quiz me', 'Explain step by step', 'Why does this matter?'].map(p => (
                 <button
                   key={p}
-                  onClick={() => {
+                  onClick={async () => {
                     const userMsg = { role: 'user' as const, text: p }
-                    const twinMsg = { role: 'twin' as const, text: groundedReply(p) }
-                    setAskMessages(m => [...m, userMsg, twinMsg])
+                    setAskMessages(m => [...m, userMsg])
                     setAskInput('')
+                    try {
+                      const history = askMessages.map((message) => ({ role: message.role === 'user' ? 'user' as const : 'assistant' as const, content: message.text }))
+                      const result = await api.ai({ system: `You are LearnTwin. Answer only from this source text. If the answer is not in the source, say that clearly. Source:\\n${c.sourceText}`, messages: [...history, { role: 'user', content: p }], maxTokens: 500 })
+                      setAskMessages(m => [...m, { role: 'twin' as const, text: result.text }])
+                    } catch {
+                      setAskMessages(m => [...m, { role: 'twin' as const, text: groundedReply(p) }])
+                    }
                   }}
                   className="flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold border"
                   style={{ background: 'var(--secondary)', borderColor: 'var(--border)', color: 'var(--secondary-foreground)', whiteSpace: 'nowrap' }}
@@ -684,26 +735,39 @@ export default function LearningPack({ navigate, user, uploadedFile, initialTab 
                 type="text"
                 value={askInput}
                 onChange={e => setAskInput(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && askInput.trim()) {
-                    const userMsg = { role: 'user' as const, text: askInput.trim() }
-                    const twinMsg = { role: 'twin' as const, text: groundedReply(askInput.trim()) }
-                    setAskMessages(m => [...m, userMsg, twinMsg])
-                    setAskInput('')
-                  }
+                onKeyDown={async e => {
+                    if (e.key === 'Enter' && askInput.trim()) {
+                      const question = askInput.trim()
+                      const userMsg = { role: 'user' as const, text: question }
+                      setAskMessages(m => [...m, userMsg])
+                      setAskInput('')
+                      try {
+                        const history = askMessages.map((message) => ({ role: message.role === 'user' ? 'user' as const : 'assistant' as const, content: message.text }))
+                        const result = await api.ai({ system: `You are LearnTwin. Answer only from this source text. If the answer is not in the source, say that clearly. Source:\\n${c.sourceText}`, messages: [...history, { role: 'user', content: question }], maxTokens: 500 })
+                        setAskMessages(m => [...m, { role: 'twin' as const, text: result.text }])
+                      } catch {
+                        setAskMessages(m => [...m, { role: 'twin' as const, text: groundedReply(question) }])
+                      }
+                    }
                 }}
                 placeholder={`Ask about ${c.topic}…`}
                 className="flex-1 px-4 py-3 rounded-2xl border-2 text-sm font-body"
                 style={{ background: 'var(--card)', borderColor: 'var(--border)', color: 'var(--foreground)', outline: 'none' }}
               />
               <button
-                onClick={() => {
-                  if (!askInput.trim()) return
-                  const userMsg = { role: 'user' as const, text: askInput.trim() }
-                  const twinMsg = { role: 'twin' as const, text: groundedReply(askInput.trim()) }
-                  setAskMessages(m => [...m, userMsg, twinMsg])
-                  setAskInput('')
-                }}
+                  onClick={async () => {
+                    if (!askInput.trim()) return
+                    const question = askInput.trim()
+                    const userMsg = { role: 'user' as const, text: question }
+                    setAskMessages(m => [...m, userMsg])
+                    setAskInput('')
+                    try {
+                      const result = await api.ai({ prompt: `Use only this source text:\\n${c.sourceText}\\n\\nQuestion: ${question}`, maxTokens: 400 })
+                      setAskMessages(m => [...m, { role: 'twin' as const, text: result.text }])
+                    } catch {
+                      setAskMessages(m => [...m, { role: 'twin' as const, text: groundedReply(question) }])
+                    }
+                  }}
                 className="w-12 h-12 rounded-2xl flex items-center justify-center btn-press flex-shrink-0"
                 style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}
               >
@@ -793,7 +857,7 @@ export default function LearningPack({ navigate, user, uploadedFile, initialTab 
             <p className="text-sm font-body mb-4" style={{ color: 'var(--muted-foreground)' }}>
               See {c.topic} in the real world:
             </p>
-            {c.examples.map((ex, i) => (
+            {c.examples.map((ex: any, i: any) => (
               <div
                 key={i}
                 className="rounded-2xl border p-5"
@@ -814,7 +878,7 @@ export default function LearningPack({ navigate, user, uploadedFile, initialTab 
             <p className="text-sm font-body mb-4" style={{ color: 'var(--muted-foreground)' }}>
               Try these to help remember {c.topic}:
             </p>
-            {c.practiceQs.map((q, i) => (
+            {c.practiceQs.map((q: any, i: any) => (
               <div
                 key={i}
                 className="rounded-2xl border p-5"

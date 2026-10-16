@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react'
 import type { Page, UserProfile, EducationLevel } from '../types'
 import Mascot from '../components/Mascot'
+import LearningPreferencesPanel from '../components/preferences/LearningPreferencesPanel'
+import { usePreferences } from '../context/PreferencesContext'
 
 interface Props {
   navigate: (p: Page) => void
@@ -8,8 +10,8 @@ interface Props {
   setUser: (u: UserProfile) => void
 }
 
-type Step = 'welcome' | 'education' | 'name' | 'visual' | 'audio' | 'format' | 'result'
-const steps: Step[] = ['welcome', 'education', 'name', 'visual', 'audio', 'format', 'result']
+type Step = 'welcome' | 'education' | 'name' | 'visual' | 'audio' | 'format' | 'preferences' | 'result'
+const steps: Step[] = ['welcome', 'education', 'name', 'visual', 'audio', 'format', 'preferences', 'result']
 
 const SAMPLE = `Plants make their own food using sunlight, water, and carbon dioxide. This process is called photosynthesis. The green colour in plants comes from chlorophyll, which captures energy from the sun.`
 
@@ -69,6 +71,7 @@ const EDU_OPTIONS: EduOpt[] = [
 ]
 
 export default function Onboarding({ navigate, user, setUser }: Props) {
+  const { update } = usePreferences()
   const [step, setStep]         = useState<Step>('welcome')
   const [name, setName]         = useState('')
   const [eduLevel, setEduLevel] = useState<EducationLevel | null>(null)
@@ -109,6 +112,7 @@ export default function Onboarding({ navigate, user, setUser }: Props) {
         customCourse: customCourse || undefined,
       },
       selectedSubjects: [],
+      learningPreferences: user.learningPreferences,
       role: 'student',
       accessibility: {
         ...user.accessibility,
@@ -493,6 +497,19 @@ export default function Onboarding({ navigate, user, setUser }: Props) {
             <button onClick={fwd} disabled={Object.keys(ratings).length < 3} className="w-full py-4 bg-primary text-primary-foreground rounded-2xl font-black text-lg shadow-xl btn-press disabled:opacity-40">
               See My Results ✨
             </button>
+          </div>
+        )}
+
+        {/* ── LEARNING PREFERENCES ── */}
+        {step === 'preferences' && (
+          <div className="max-w-2xl w-full animate-pop">
+            <LearningPreferencesPanel
+              mode="onboarding"
+              student={{ grade, subject: '', language: 'en' }}
+              subjects={[]}
+              onSave={() => { update({ onboardingPreferencesDone: true }); fwd() }}
+              onSkip={() => { update({ onboardingPreferencesDone: true }); fwd() }}
+            />
           </div>
         )}
 

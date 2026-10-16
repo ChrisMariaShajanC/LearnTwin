@@ -10,6 +10,33 @@ import db from './db.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+// Load server/.env into process.env without exposing values to the frontend.
+const envPath = path.join(__dirname, '.env')
+if (fs.existsSync(envPath)) {
+  for (const rawLine of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
+    const line = rawLine.trim()
+    if (!line || line.startsWith('#')) continue
+    const equalsIndex = line.indexOf('=')
+    if (equalsIndex <= 0) continue
+    const key = line.slice(0, equalsIndex).trim()
+    const value = line.slice(equalsIndex + 1).trim().replace(/^['"]|['"]$/g, '')
+    if (key && process.env[key] === undefined) process.env[key] = value
+  }
+}
+
+async function openaiFetch(url, options) {
+  try {
+    return await fetch(url, options)
+  } catch (error) {
+    const code = error?.cause?.code || error?.code
+    if (code === 'SELF_SIGNED_CERT_IN_CHAIN' || code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' || String(error?.message || '').includes('self-signed')) {
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+      return fetch(url, options)
+    }
+    throw error
+  }
+}
+
 const app = express()
 const PORT = process.env.PORT || 3001
 
@@ -30,8 +57,8 @@ app.post('/api/user', (req, res) => {
   const user = req.body
   const id = user.id || generateId('user')
   db.prepare(`
-    INSERT INTO users (id, name, grade, education_level, stream, education, selected_subjects, role, avatar, accessibility, learning_pattern, ai_confidence, streak, lessons_completed, understanding, xp)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO users (id, name, grade, education_level, stream, education, selected_subjects, role, avatar, accessibility, learning_pattern, preferences, ai_confidence, streak, lessons_completed, understanding, xp)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id, user.name, user.grade, user.educationLevel, user.stream || null,
     JSON.stringify(user.education || {}),
@@ -39,6 +66,7 @@ app.post('/api/user', (req, res) => {
     user.role || 'student', user.avatar || null,
     JSON.stringify(user.accessibility || {}),
     JSON.stringify(user.learningPattern || {}),
+    JSON.stringify(user.learningPreferences || user.preferences || {}),
     user.aiConfidence || 0, user.streak || 0, user.lessonsCompleted || 0,
     user.understanding || 0, user.xp || 0
   )
@@ -48,7 +76,7 @@ app.post('/api/user', (req, res) => {
 app.put('/api/user/:id', (req, res) => {
   const user = req.body
   db.prepare(`
-    UPDATE users SET name=?, grade=?, education_level=?, stream=?, education=?, selected_subjects=?, role=?, avatar=?, accessibility=?, learning_pattern=?, ai_confidence=?, streak=?, lessons_completed=?, understanding=?, xp=?, updated_at=datetime('now')
+    UPDATE users SET name=?, grade=?, education_level=?, stream=?, education=?, selected_subjects=?, role=?, avatar=?, accessibility=?, learning_pattern=?, preferences=?, ai_confidence=?, streak=?, lessons_completed=?, understanding=?, xp=?, updated_at=datetime('now')
     WHERE id = ?
   `).run(
     user.name, user.grade, user.educationLevel, user.stream || null,
@@ -57,6 +85,7 @@ app.put('/api/user/:id', (req, res) => {
     user.role || 'student', user.avatar || null,
     JSON.stringify(user.accessibility || {}),
     JSON.stringify(user.learningPattern || {}),
+    JSON.stringify(user.learningPreferences || user.preferences || {}),
     user.aiConfidence || 0, user.streak || 0, user.lessonsCompleted || 0,
     user.understanding || 0, user.xp || 0, req.params.id
   )
@@ -187,7 +216,8 @@ function parseUser(row) {
     education: JSON.parse(row.education || '{}'),
     selectedSubjects: JSON.parse(row.selected_subjects || '[]'),
     accessibility: JSON.parse(row.accessibility || '{}'),
-    learningPattern: JSON.parse(row.learning_pattern || '{}')
+    learningPattern: JSON.parse(row.learning_pattern || '{}'),
+    learningPreferences: JSON.parse(row.preferences || '{}')
   }
 }
 
@@ -270,6 +300,160 @@ app.post('/api/analyze-document', (req, res) => {
     wordCount: words.length,
     sentenceCount: sentences.length,
   })
+})
+
+// ============================================================
+// AI proxy (Anthropic). API key stays server-side only.
+// ============================================================
+
+function getAiConfig() {
+  const apiKey = process.env.NVIDIA_API_KEY || process.env.AI_API_KEY || process.env.OPENAI_API_KEY || process.env.GROQ_API_KEY
+  const baseUrl = (process.env.AI_BASE_URL || process.env.NVIDIA_BASE_URL || process.env.OPENAI_BASE_URL || 'https://integrate.api.nvidia.com/v1').replace(/\/$/, '')
+  const model = process.env.AI_MODEL || process.env.NVIDIA_MODEL || process.env.OPENAI_MODEL || 'mistralai/mistral-7b-instruct-v0.3'
+  return { apiKey, baseUrl, model }
+}
+
+app.post('/api/ai', async (req, res) => {
+  const { apiKey, baseUrl, model } = getAiConfig()
+  if (!apiKey) {
+    return res.status(503).json({ error: 'AI_API_KEY is missing. Set AI_API_KEY (or GROQ_API_KEY/OPENAI_API_KEY) in server/.env to enable AI features.' })
+  }
+  const { system, prompt, messages, maxTokens } = req.body || {}
+  const chatMessages = []
+  if (system) chatMessages.push({ role: 'system', content: String(system) })
+  if (Array.isArray(messages) && messages.length) {
+    for (const message of messages) {
+      if (message && (message.role === 'user' || message.role === 'assistant') && typeof message.content === 'string') {
+        chatMessages.push({ role: message.role, content: message.content })
+      }
+    }
+  } else if (prompt) {
+    chatMessages.push({ role: 'user', content: String(prompt) })
+  }
+  if (!chatMessages.some((message) => message.role === 'user')) {
+    return res.status(400).json({ error: 'Missing prompt or conversation messages' })
+  }
+
+  try {
+    const response = await openaiFetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: Math.min(Number(maxTokens) || 800, 2000),
+        messages: chatMessages
+      })
+    })
+    const raw = await response.text()
+    if (!response.ok) {
+      return res.status(response.status).json({ error: `AI request failed: ${raw}` })
+    }
+    const data = JSON.parse(raw)
+    const text = data.choices?.[0]?.message?.content || ''
+    res.json({ text: text || 'No AI response was returned.' })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// ============================================================
+// AI learning-pack generation (OpenAI, server-side key only)
+// ============================================================
+
+app.post('/api/generate-pack', async (req, res) => {
+  const { apiKey, baseUrl, model } = getAiConfig()
+  if (!apiKey) {
+    return res.status(503).json({ error: 'AI_API_KEY is missing. Set AI_API_KEY (or GROQ_API_KEY/OPENAI_API_KEY) in server/.env to enable AI features.' })
+  }
+  const { text, filename } = req.body || {}
+  if (!String(text || '').trim()) return res.status(400).json({ error: 'Missing document text' })
+
+  const source = String(text).slice(0, 15000)
+  const system = 'You are LearnTwin, an adaptive learning assistant. Return strict JSON only. Do not invent facts beyond the supplied source text. If the source is unclear, use conservative wording based on the source.'
+  const prompt = `Create a complete learning pack from this document${filename ? ` (${filename})` : ''}. Return JSON with these fields:
+{
+  "topic": "short topic title",
+  "subject": "best subject area",
+  "difficulty": "Easy|Moderate|Challenging",
+  "keyConcepts": ["4 to 8 important concepts from the source"],
+  "vocabulary": ["4 to 8 important terms from the source"],
+  "summary": "3 to 5 sentence summary based only on the source",
+  "lesson": "markdown lesson using the reviewed source content",
+  "notes": [{"heading":"concept","body":"source-based note"}],
+  "quiz": [{"type":"mcq|tf|short","q":"question","options":["A","B","C","D"],"answer":"correct answer","explanation":"why"}],
+  "examples": [{"title":"title","body":"example grounded in source"}],
+  "practiceQuestions": ["5 short practice questions"],
+  "videos": [{"title":"source-based lesson title","desc":"what it covers","text":"text to read aloud"}]
+}
+Source text:
+${source}`
+
+  try {
+    const response = await openaiFetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 3000,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: prompt }
+        ]
+      })
+    })
+    const raw = await response.text()
+    if (!response.ok) {
+      return res.status(response.status).json({ error: `AI request failed: ${raw}` })
+    }
+    const data = JSON.parse(raw)
+    const content = data.choices?.[0]?.message?.content || ''
+    let pack
+    try {
+      pack = JSON.parse(content)
+    } catch {
+      const match = content.match(/\{[\s\S]*\}/)
+      pack = match ? JSON.parse(match[0]) : null
+    }
+    if (!pack) return res.status(502).json({ error: 'AI returned invalid JSON.' })
+    res.json({ pack })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// ============================================================
+// Diagram persistence (Visual Studio)
+// ============================================================
+
+app.get('/api/diagrams', (req, res) => {
+  const userId = req.query.userId
+  const rows = userId
+    ? db.prepare('SELECT * FROM diagrams WHERE user_id = ? ORDER BY created_at DESC').all(userId)
+    : db.prepare('SELECT * FROM diagrams ORDER BY created_at DESC').all()
+  res.json(rows.map((row) => ({ ...row, spec: JSON.parse(row.spec || '{}') })))
+})
+
+app.post('/api/diagrams', (req, res) => {
+  const body = req.body || {}
+  const id = body.id || generateId('diagram')
+  db.prepare(`
+    INSERT INTO diagrams (id, user_id, topic, diagram_type, complexity, spec)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(id, body.userId || null, body.topic || null, body.diagramType || null, body.complexity || 'simple', JSON.stringify(body.spec || {}))
+  res.json({ id, ...body })
+})
+
+app.get('/api/diagrams/:id', (req, res) => {
+  const row = db.prepare('SELECT * FROM diagrams WHERE id = ?').get(req.params.id)
+  if (!row) return res.status(404).json({ error: 'Diagram not found' })
+  res.json({ ...row, spec: JSON.parse(row.spec || '{}') })
 })
 
 app.listen(PORT, () => {

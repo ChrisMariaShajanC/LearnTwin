@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { PreferencesProvider } from './context/PreferencesContext'
 import type { Page, ThemeMode, UserProfile, DensitySize } from './types'
 import type { SubjectDefinition } from './data/curriculum'
 import { readLocal, writeLocal } from './lib/localData'
@@ -30,6 +31,7 @@ import Subjects from './pages/Subjects'
 import SubjectDetail from './pages/SubjectDetail'
 import StudyPlanner from './pages/StudyPlanner'
 import LearningHistory from './pages/LearningHistory'
+import VisualStudio from './pages/VisualStudio'
 
 const defaultUser: UserProfile = {
   name: '',
@@ -41,7 +43,7 @@ const defaultUser: UserProfile = {
   xp: 0,
   accessibility: {
     fontSize: 'normal',
-    fontFamily: 'lexend',
+    fontFamily: 'atkinson',
     lineSpacing: 'normal',
     wordSpacing: 'normal',
     letterSpacing: 'normal',
@@ -56,6 +58,16 @@ const defaultUser: UserProfile = {
     text: 0,
     stepByStep: 0,
   },
+  learningPreferences: {
+    font: 'default',
+    learningFormats: [],
+    explanationStyle: null,
+    chunkSize: 'medium',
+    interests: [],
+    interestsCustom: '',
+    formatSwitching: 'noPreference',
+    onboardingPreferencesDone: false,
+  },
   aiConfidence: 0,
   streak: 0,
   lessonsCompleted: 0,
@@ -69,7 +81,7 @@ const pagesWithNav: Page[] = [
   'dashboard', 'scan', 'lesson', 'quiz', 'progress',
   'reports', 'theme', 'profile', 'settings', 'radar',
   'pack', 'parent', 'mylearning', 'videos', 'educator', 'adapted',
-  'subjects', 'subject', 'learninghistory', 'adaptive', 'asktwin', 'audiolearning', 'reading', 'accessibility',
+  'subjects', 'subject', 'learninghistory', 'visualstudio', 'adaptive', 'asktwin', 'audiolearning', 'reading', 'accessibility',
   ...PLANNER_PAGES,
   ...STUB_PAGES,
 ]
@@ -230,8 +242,9 @@ export default function App() {
   const showNav    = pagesWithNav.includes(page) && isLoggedIn
 
   return (
-    <div
-      className={themeClass}
+    <PreferencesProvider isAuthed={isLoggedIn} user={user} setUser={setUser}>
+      <div
+        className={themeClass}
       style={{ minHeight: '100%', background: 'var(--background)', color: 'var(--foreground)' }}
     >
       {showNav && (
@@ -344,10 +357,12 @@ export default function App() {
         )}
         {PLANNER_PAGES.includes(page) && <StudyPlanner navigate={navigate} user={user} view={page} />}
         {page === 'learninghistory' && <LearningHistory navigate={navigate} user={user} uploads={uploads} />}
+        {page === 'visualstudio' && <VisualStudio navigate={navigate} user={user} uploadedFile={uploadedFile} />}
         {STUB_PAGES.includes(page) && (
           <StubPage navigate={navigate} user={user} page={page} />
         )}
       </div>
     </div>
+    </PreferencesProvider>
   )
 }
