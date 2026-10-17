@@ -263,6 +263,23 @@ export default function Reports({ navigate, user }: Props) {
 
   const switchTab = (t: ReportTab) => { setTab(t); setExportState('idle') }
 
+  const shareReport = async (recipient: 'Parent' | 'Teacher') => {
+    const pdf = buildReportPDF(tab, user)
+    const blob = new Blob([pdf], { type: 'application/pdf' })
+    const file = new File([blob], `LearnTwin_${REPORT_LABELS[tab].replace(/ /g, '_')}_${user.name}.pdf`, { type: 'application/pdf' })
+    if (navigator.share && navigator.canShare?.({ files: [file] })) {
+      try { await navigator.share({ title: `${recipient} report`, files: [file] }); return } catch { /* user cancelled or unsupported; fall through */ }
+    }
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = file.name
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="min-h-screen bg-background pb-24 md:pb-8 font-display">
       <div className="max-w-3xl mx-auto px-6 py-8">
@@ -536,10 +553,10 @@ export default function Reports({ navigate, user }: Props) {
         )}
 
         <div className="flex flex-wrap gap-3 mt-3">
-          <button className="flex items-center gap-2 px-4 py-3 bg-card border border-border text-foreground rounded-xl font-bold text-sm hover:border-primary transition-all">
+          <button onClick={() => shareReport('Parent')} className="flex items-center gap-2 px-4 py-3 bg-card border border-border text-foreground rounded-xl font-bold text-sm hover:border-primary transition-all">
             👨‍👩‍👧 Share with Parent
           </button>
-          <button className="flex items-center gap-2 px-4 py-3 bg-card border border-border text-foreground rounded-xl font-bold text-sm hover:border-primary transition-all">
+          <button onClick={() => shareReport('Teacher')} className="flex items-center gap-2 px-4 py-3 bg-card border border-border text-foreground rounded-xl font-bold text-sm hover:border-primary transition-all">
             👩‍🏫 Share with Teacher
           </button>
         </div>
