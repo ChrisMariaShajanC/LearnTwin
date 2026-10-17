@@ -12,7 +12,7 @@ interface Props {
 }
 
 type Step = 'welcome' | 'education' | 'name' | 'font' | 'visual' | 'audio' | 'format' | 'preferences' | 'result'
-const steps: Step[] = ['welcome', 'education', 'name', 'font', 'visual', 'audio', 'format', 'preferences', 'result']
+const steps: Step[] = ['welcome', 'education', 'name', 'font', 'visual', 'audio', 'preferences', 'format', 'result']
 
 const SAMPLE = `Plants make their own food using sunlight, water, and carbon dioxide. This process is called photosynthesis. The green colour in plants comes from chlorophyll, which captures energy from the sun.`
 
