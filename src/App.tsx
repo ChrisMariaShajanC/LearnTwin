@@ -249,6 +249,17 @@ export default function App() {
       style={{ minHeight: '100%', background: 'var(--background)', color: 'var(--foreground)' }}
     >
       {showNav && (
+        <button
+          onClick={() => setShowProfile(true)}
+          className="fixed top-3 right-3 z-[60] w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white shadow-lg"
+          style={{ background: 'var(--primary)' }}
+          aria-label="Open profile"
+        >
+          {(user.name || 'U').charAt(0).toUpperCase()}
+        </button>
+      )}
+
+      {showNav && (
         <Navigation
           current={page}
           navigate={navigate}
