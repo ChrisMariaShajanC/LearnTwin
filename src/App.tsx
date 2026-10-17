@@ -250,7 +250,7 @@ export default function App() {
     >
       {showNav && (
         <button
-          onClick={() => setShowProfile(true)}
+          onClick={() => navigate('profile')}
           className="fixed top-3 right-3 z-[60] w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white shadow-lg"
           style={{ background: 'var(--primary)' }}
           aria-label="Open profile"
@@ -318,7 +318,7 @@ export default function App() {
         {page === 'theme'      && <ThemeCustomizer navigate={navigate} theme={theme} setTheme={setTheme} user={user} setUser={setUser} />}
         {page === 'parent'     && <ParentView navigate={navigate} user={user} />}
         {page === 'educator'   && <Educator navigate={navigate} user={user} />}
-        {page === 'profile'    && <Profile navigate={navigate} user={user} />}
+        {page === 'profile'    && <Profile navigate={navigate} user={user} setUser={setUser} onLogout={handleLogout} />}
         {page === 'radar'      && <Radar navigate={navigate} user={user} />}
         {page === 'settings'   && (
           <Settings
