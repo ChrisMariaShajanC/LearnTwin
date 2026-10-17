@@ -69,7 +69,7 @@ export interface EducationProfile {
 
 export interface AccessibilityProfile {
   fontSize: 'small' | 'normal' | 'large' | 'xl'
-  fontFamily: 'lexend' | 'nunito' | 'system' | 'arial' | 'verdana' | 'atkinson'
+  fontFamily: 'lexend' | 'nunito' | 'system' | 'arial' | 'verdana' | 'atkinson' | 'opendyslexic'
   lineSpacing: 'normal' | 'relaxed' | 'loose'
   wordSpacing: 'normal' | 'wide'
   letterSpacing: 'normal' | 'wide'

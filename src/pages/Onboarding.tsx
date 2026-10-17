@@ -3,6 +3,7 @@ import type { Page, UserProfile, EducationLevel } from '../types'
 import Mascot from '../components/Mascot'
 import LearningPreferencesPanel from '../components/preferences/LearningPreferencesPanel'
 import { usePreferences } from '../context/PreferencesContext'
+import { useSpeech } from '../hooks/useSpeech'
 
 interface Props {
   navigate: (p: Page) => void
@@ -10,8 +11,8 @@ interface Props {
   setUser: (u: UserProfile) => void
 }
 
-type Step = 'welcome' | 'education' | 'name' | 'visual' | 'audio' | 'format' | 'preferences' | 'result'
-const steps: Step[] = ['welcome', 'education', 'name', 'visual', 'audio', 'format', 'preferences', 'result']
+type Step = 'welcome' | 'education' | 'name' | 'font' | 'visual' | 'audio' | 'format' | 'preferences' | 'result'
+const steps: Step[] = ['welcome', 'education', 'name', 'font', 'visual', 'audio', 'format', 'preferences', 'result']
 
 const SAMPLE = `Plants make their own food using sunlight, water, and carbon dioxide. This process is called photosynthesis. The green colour in plants comes from chlorophyll, which captures energy from the sun.`
 
@@ -82,10 +83,12 @@ export default function Onboarding({ navigate, user, setUser }: Props) {
   const [semester, setSemester] = useState('')
   const [institution, setInstitution] = useState('')
   const [customCourse, setCustomCourse] = useState('')
-  const [visual, setVisual]     = useState<string | null>(null)
+  const [visual, setVisual]     = useState<string | null>(() => (user.accessibility?.fontSize === 'xl' ? 'A' : user.accessibility?.fontSize === 'large' ? 'B' : user.accessibility?.fontSize ? 'C' : null))
+  const [fontChoice, setFontChoice] = useState<'sans' | 'opendyslexic' | 'lexend'>(() => (user.accessibility?.fontFamily === 'opendyslexic' ? 'opendyslexic' : user.accessibility?.fontFamily === 'lexend' ? 'lexend' : 'sans'))
   const [audioAns, setAudioAns] = useState<string | null>(null)
   const [ratings, setRatings]   = useState<Record<string, number>>({})
   const [playing, setPlaying]   = useState(false)
+  const speech = useSpeech()
   const [avatar, setAvatar]     = useState<string | undefined>(undefined)
   const avatarRef = useRef<HTMLInputElement>(null)
 
@@ -112,14 +115,24 @@ export default function Onboarding({ navigate, user, setUser }: Props) {
         customCourse: customCourse || undefined,
       },
       selectedSubjects: [],
-      learningPreferences: user.learningPreferences,
       role: 'student',
       accessibility: {
         ...user.accessibility,
         fontSize:    visual === 'A' ? 'xl' : visual === 'B' ? 'large' : 'normal',
+        fontFamily:  fontChoice === 'opendyslexic' ? 'opendyslexic' : fontChoice === 'lexend' ? 'lexend' : 'system',
         background:  visual === 'A' ? 'warm' : visual === 'C' ? 'cool' : 'light',
         lineSpacing: visual === 'A' ? 'loose' : 'relaxed',
         audioEnabled: audioAns === 'Chlorophyll',
+      },
+      learningPreferences: {
+        font: fontChoice === 'opendyslexic' ? 'opendyslexic' : fontChoice === 'lexend' ? 'atkinson' : 'default',
+        learningFormats: user.learningPreferences?.learningFormats || [],
+        explanationStyle: user.learningPreferences?.explanationStyle ?? null,
+        chunkSize: user.learningPreferences?.chunkSize || 'medium',
+        interests: user.learningPreferences?.interests || [],
+        interestsCustom: user.learningPreferences?.interestsCustom || '',
+        formatSwitching: user.learningPreferences?.formatSwitching || 'noPreference',
+        onboardingPreferencesDone: user.learningPreferences?.onboardingPreferencesDone || false,
       },
       learningPattern: {
         visual:     (ratings['visual']     ?? 4) * 20,
@@ -377,6 +390,33 @@ export default function Onboarding({ navigate, user, setUser }: Props) {
           </div>
         )}
 
+        {/* ── FONT ── */}
+        {step === 'font' && (
+          <div className="max-w-lg w-full animate-pop">
+            <div className="text-center mb-7">
+              <div className="text-4xl mb-2">🔤</div>
+              <h2 className="text-2xl md:text-3xl font-black mb-2" style={{ color: 'var(--foreground)' }}>Which letters are easiest to read?</h2>
+              <p className="font-body" style={{ color: 'var(--muted-foreground)' }}>Pick the font that feels best. You can change it later.</p>
+            </div>
+            <div className="space-y-3 mb-7">
+              {[
+                { id: 'sans', label: 'Sans Serif', css: "system-ui, sans-serif", sample: 'Plants need water and light.' },
+                { id: 'opendyslexic', label: 'OpenDyslexic', css: "'OpenDyslexic', Verdana, sans-serif", sample: 'Plants need water and light.' },
+                { id: 'lexend', label: 'Lexend', css: "'Lexend', sans-serif", sample: 'Plants need water and light.' },
+              ].map(opt => (
+                <button key={opt.id} onClick={() => setFontChoice(opt.id as any)} className="w-full text-left rounded-3xl border-2 overflow-hidden transition-all" style={{ borderColor: fontChoice === opt.id ? 'var(--primary)' : 'var(--border)', transform: fontChoice === opt.id ? 'scale(1.015)' : 'scale(1)' }}>
+                  <div className="px-5 py-4" style={{ fontFamily: opt.css, fontSize: 18, lineHeight: 1.8, color: 'var(--foreground)', background: 'var(--card)' }}>{opt.sample}</div>
+                  <div className="flex items-center justify-between px-5 py-3 border-t" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
+                    <span className="font-black font-display" style={{ color: 'var(--foreground)' }}>Option {opt.id === 'sans' ? 'A' : opt.id === 'opendyslexic' ? 'B' : 'C'} {opt.label}</span>
+                    {fontChoice === opt.id && <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-white text-xs font-black">✓</div>}
+                  </div>
+                </button>
+              ))}
+            </div>
+            <button onClick={fwd} className="w-full py-4 bg-primary text-primary-foreground rounded-2xl font-black text-lg shadow-xl btn-press">Next →</button>
+          </div>
+        )}
+
         {/* ── VISUAL ── */}
         {step === 'visual' && (
           <div className="max-w-2xl w-full animate-pop">
@@ -398,7 +438,7 @@ export default function Onboarding({ navigate, user, setUser }: Props) {
                     boxShadow: visual === opt.id ? '0 0 0 3px rgba(78,205,196,.2)' : undefined,
                   }}
                 >
-                  <div style={opt.style as React.CSSProperties} className="font-body">{SAMPLE}</div>
+                  <div style={{ ...(opt.style as React.CSSProperties), fontFamily: fontChoice === 'opendyslexic' ? "'OpenDyslexic', Verdana, sans-serif" : fontChoice === 'lexend' ? "'Lexend', sans-serif" : "system-ui, sans-serif" }} className="font-body">{SAMPLE}</div>
                   <div className="flex items-center justify-between px-5 py-3 border-t" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
                     <div>
                       <span className="font-black font-display" style={{ color: 'var(--foreground)' }}>Option {opt.id} {opt.emoji}</span>
@@ -425,18 +465,24 @@ export default function Onboarding({ navigate, user, setUser }: Props) {
               <p className="font-body" style={{ color: 'var(--muted-foreground)' }}>Some people understand more by listening. Let's find out!</p>
             </div>
             <div className="rounded-3xl border p-6 mb-5" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
-              <p className="font-body leading-relaxed mb-5" style={{ fontSize: 17, lineHeight: 1.9, color: 'var(--foreground)' }}>{SAMPLE}</p>
-              <button onClick={() => setPlaying(!playing)} className="flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-xl font-bold text-sm btn-press">
-                {playing ? '⏸ Pause' : '🔊 Listen to this'}
+              <p className="font-body leading-relaxed mb-5" style={{ ...(visualOpts.find(o => o.id === visual)?.style as React.CSSProperties || {}), fontFamily: fontChoice === 'opendyslexic' ? "'OpenDyslexic', Verdana, sans-serif" : fontChoice === 'lexend' ? "'Lexend', sans-serif" : "system-ui, sans-serif", color: 'var(--foreground)' }}>{SAMPLE}</p>
+              <button onClick={() => {
+                if (speech.state === 'speaking') speech.pause()
+                else if (speech.state === 'paused') speech.resume()
+                else speech.speak(SAMPLE, 'en')
+                setPlaying(speech.state !== 'speaking')
+              }} className="flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-xl font-bold text-sm btn-press">
+                {speech.state === 'speaking' ? '⏸ Pause' : speech.state === 'paused' ? '▶ Resume' : '🔊 Listen to this'}
               </button>
-              {playing && (
+              {(speech.state === 'speaking' || speech.state === 'paused') && (
                 <div className="flex gap-1 items-end h-5 mt-3">
                   {[...Array(10)].map((_, i) => (
                     <div key={i} className="w-1 rounded-full animate-bounce bg-primary" style={{ height: `${8 + Math.sin(i * 0.7) * 8}px`, animationDelay: `${i * .1}s` }} />
                   ))}
-                  <span className="text-xs font-body ml-2 self-center" style={{ color: 'var(--muted-foreground)' }}>Reading aloud…</span>
+                  <span className="text-xs font-body ml-2 self-center" style={{ color: 'var(--muted-foreground)' }}>{speech.state === 'speaking' ? 'Reading aloud…' : 'Paused.'}</span>
                 </div>
               )}
+              {speech.state === 'error' && <p className="text-xs mt-2" style={{ color: '#EF4444' }}>Audio could not play. You can still read the sample.</p>}
             </div>
             <div className="rounded-2xl p-5 mb-5 border" style={{ background: 'var(--secondary)', borderColor: 'var(--border)' }}>
               <p className="font-black mb-3" style={{ color: 'var(--foreground)' }}>Quick question about the text:</p>

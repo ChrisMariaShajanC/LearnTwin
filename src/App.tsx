@@ -208,6 +208,7 @@ export default function App() {
       arial: "Arial, sans-serif",
       verdana: "Verdana, sans-serif",
       atkinson: "'Atkinson Hyperlegible', sans-serif",
+    opendyslexic: "'OpenDyslexic', Verdana, sans-serif",
     }
     const sizes = { small: '0.9', normal: '1', large: '1.08', xl: '1.18' }
     const lines = { normal: '1.5', relaxed: '1.75', loose: '2' }
