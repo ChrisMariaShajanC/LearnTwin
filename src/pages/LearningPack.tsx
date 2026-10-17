@@ -908,6 +908,13 @@ export default function LearningPack({ navigate, user, uploadedFile, initialTab 
             >
               Take Full Quiz 🎯
             </button>
+            <button
+              onClick={() => navigate('visualstudio')}
+              className="w-full py-3 rounded-2xl font-bold text-base border"
+              style={{ background: 'var(--card)', borderColor: 'var(--border)', color: 'var(--foreground)' }}
+            >
+              Visualize this topic 🎨
+            </button>
           </div>
         )}
       </div>
